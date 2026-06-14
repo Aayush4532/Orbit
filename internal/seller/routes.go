@@ -1,7 +1,14 @@
 package seller
 
-import "github.com/gin-gonic/gin"
+import (
+	"Orbit/internal/middleware"
 
-func SellerRoutes (r *gin.RouterGroup) {
-	
+	"github.com/gin-gonic/gin"
+)
+
+func SellerRoutes(r *gin.RouterGroup) {
+	r.Use(
+		middleware.UserMiddleware(),
+		middleware.SellerMiddleware(),
+	)
 }

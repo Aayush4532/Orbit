@@ -1,0 +1,232 @@
+openapi: 3.0.3
+info:
+  title: Orbit
+  description: Orbit API documentation.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:9132
+    description: Local Development Server
+  - url: https://Orbit.Akarta.tech
+    description: Production Server
+
+paths:
+  /api/auth/check:
+    get:
+      summary: Check Endpoint for if user is signed in or not.
+      description: Will be useful to check authenticated token after their expiry.
+      responses:
+        '200':
+          description: Authenticated true as well as user is signed in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  _id:
+                    type: string
+                    example: "60d5ec49f83b"
+                  emailId:
+                    type: string
+                    example: "user@example.com"
+                  role:
+                    type: string
+                    enum: [seller, buyer, admin]
+                    example: "buyer"
+                  isEmailVerified:
+                    type: boolean
+                    example: true
+                  isActive:
+                    type: boolean
+                    example: true
+        '400':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "session expired"
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Internal Server Error"
+
+  /api/auth/login:
+    post:
+      summary: Verify and give access with the session token
+      description: Verifies the user with email and password and if validated returns token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  example: "abc@example.com"
+                password:
+                  type: string
+                  example: "SecuredPassword@123"
+      responses:
+        '200':
+          description: Login Successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Sign In Successfully"
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        example: "obj9023"
+                      firstName:
+                        type: string
+                        example: "Aayush"
+                      lastName:
+                        type: string
+                        example: "Verma"
+                      email:
+                        type: string
+                        example: "aayush@email.com"
+                      age:
+                        type: integer
+                        example: 25
+                      role:
+                        type: string
+                        example: "seller"
+        '400':
+          description: Unauthorized Access
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "email or password is wrong"
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Internal Server Error"
+
+  /api/auth/signup:
+    post:
+      summary: Sign up user
+      description: User can signup here either with a seller, buyer, or admin profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - firstName
+                - lastName
+                - emailId
+                - password
+                - age
+                - role
+              properties:
+                firstName:
+                  type: string
+                  example: "Aayush"
+                lastName:
+                  type: string
+                  example: "Verma"
+                emailId:
+                  type: string
+                  example: "aayush@email.com"
+                password:
+                  type: string
+                  example: "SecuredPassword@123"
+                age:
+                  type: integer
+                  example: 25
+                role:
+                  type: string
+                  enum: [seller, buyer, admin]
+                  example: "seller"
+      responses:
+        '201':
+          description: Register Successfully (Returns user object and sets HttpOnly cookie)
+          headers:
+            Set-Cookie:
+              description: Contains the authentication token
+              schema:
+                type: string
+                example: "token=eyJhbGciOiJIUz...; Path=/; Max-Age=7200; HttpOnly"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Register Successfully"
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        example: "60d5ec49f83b2c3a54cd5291"
+                      firstName:
+                        type: string
+                        example: "Aayush"
+                      lastName:
+                        type: string
+                        example: "Verma"
+                      emailId:
+                        type: string
+                        example: "aayush@email.com"
+                      age:
+                        type: integer
+                        example: 25
+                      role:
+                        type: string
+                        example: "seller"
+        '400':
+          description: Bad Request (Validation failed or user already exists)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Key: 'RegisterRequest.EmailId' Error:Field validation for 'EmailId' failed on the 'email' tag"
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Internal Server Error"
+
+  
