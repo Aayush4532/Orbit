@@ -35,7 +35,7 @@ func RegisterUserService(ctx context.Context, req RegisterRequest) (string, *mod
 		Age:             req.Age,
 		Password:        string(hash),
 		Role:            req.Role,
-		IsEmailVerified: true,
+		IsEmailVerified: false,
 		IsActive:        true,
 		CreatedAt:       now,
 		UpdatedAt:       now,

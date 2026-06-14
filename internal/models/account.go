@@ -6,10 +6,18 @@ import (
 )
 
 type SellerProfile struct {
-	CompanyName string `bson:"companyName,omitempty" json:"companyName,omitempty"`
-	GSTIN       string `bson:"gstin,omitempty" json:"gstin,omitempty"`
-	IsApproved  bool   `bson:"isApproved" json:"isApproved"`   // Admin approval flag
-	BankDetails string `bson:"bankDetails,omitempty" json:"-"` // Hidden in JSON responses
+	CompanyName     string    `bson:"companyName,omitempty" json:"companyName,omitempty"`
+	GSTIN           string    `bson:"gstin,omitempty" json:"gstin,omitempty"`
+	IsApproved      bool      `bson:"isApproved" json:"isApproved"`
+	BankDetails     BankInfo  `bson:"bankDetails,omitempty" json:"-"`
+	LastRequestedAt time.Time `bson:"lastRequestedAt,omitempty" json:"lastRequestedAt,omitempty"`
+	NextAllowedAt   time.Time `bson:"nextAllowedAt,omitempty" json:"nextAllowedAt,omitempty"`
+}
+type BankInfo struct {
+	AccountHolderName string `bson:"accountHolderName,omitempty" json:"accountHolderName,omitempty"`
+	AccountNumber     string `bson:"accountNumber,omitempty" json:"accountNumber,omitempty"`
+	IFSCCode          string `bson:"ifscCode,omitempty" json:"ifscCode,omitempty"`
+	BankName          string `bson:"bankName,omitempty" json:"bankName,omitempty"`
 }
 
 type BuyerProfile struct {
@@ -25,7 +33,7 @@ type User struct {
 	EmailId   string        `bson:"emailId" json:"emailId"`
 	Password  string        `bson:"password" json:"-"`
 	Age       int           `bson:"age,omitempty" json:"age,omitempty"`
-	Role      string        `bson:"role" json:"role"` // enum: "admin", "buyer", "seller"
+	Role      string        `bson:"role" json:"role"` // enum: "admin", "buyer", "seller", "user"
 
 	IsEmailVerified bool `bson:"isEmailVerified" json:"isEmailVerified"`
 	IsActive        bool `bson:"isActive" json:"isActive"` // to block if needed.

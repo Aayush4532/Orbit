@@ -56,6 +56,13 @@ func SellerMiddleware() gin.HandlerFunc { // just a func to check if the user is
 			return
 		}
 
+		if claim.IsEmailVerified == false {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"message": "Email verification required",
+			})
+			return
+		}
+
 		c.Next()
 	}
 }
