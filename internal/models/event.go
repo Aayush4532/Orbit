@@ -12,6 +12,7 @@ type Event struct {
 	Description string        `bson:"description" json:"description"`
 	ScheduledAt time.Time     `bson:"scheduledAt" json:"scheduledAt"`
 	IsLive      bool          `bson:"isLive" json:"isLive"`
+	ImageBanner string        `bson:"imageBanner" json:"imageBanner"`
 
 	CreatedAt time.Time `bson:"createdAt" json:"createdAt"`
 	UpdatedAt time.Time `bson:"updatedAt" json:"updatedAt"`

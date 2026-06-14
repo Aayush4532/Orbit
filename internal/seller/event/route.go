@@ -4,11 +4,11 @@ import "github.com/gin-gonic/gin"
 
 func EventRoutes(r *gin.RouterGroup) {
 	//---------Events Routes---------//
-	r.POST("/create", );
-	r.GET("/get", );
-	r.GET("/get/:id", );
-	r.PUT("/update/:id", );
-	r.DELETE("/delete/:id", );
+	r.POST("/create", CreateAnEventHandler);
+	r.GET("/get", GetAllEventsHandler);
+	r.GET("/get/:id", GetAnEventHandler);
+	r.PUT("/update/:id", UpdateAnEventHandler);
+	r.DELETE("/delete/:id", DeleteAnEventHandler);
 
 	// --------Event Product Routes---------//
 	r.POST("/:eventId/registerProducts", );
