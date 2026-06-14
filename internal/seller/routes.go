@@ -8,8 +8,6 @@ import (
 	"Orbit/internal/seller/event"
 )
 
-
-
 func SellerRoutes(r *gin.RouterGroup) {
 	r.Use(
 		middleware.UserMiddleware(),

@@ -1,6 +1,10 @@
 package event
 
-import "github.com/gin-gonic/gin"
+import (
+	"Orbit/internal/seller/event/product"
+
+	"github.com/gin-gonic/gin"
+)
 
 func EventRoutes(r *gin.RouterGroup) {
 	//---------Events Routes---------//
@@ -11,11 +15,11 @@ func EventRoutes(r *gin.RouterGroup) {
 	r.DELETE("/delete/:id", DeleteAnEventHandler);
 
 	// --------Event Product Routes---------//
-	r.POST("/:eventId/registerProducts", );
-	r.GET("/:eventId/getProducts", );
-	r.GET("/:eventId/getProduct/:productId", );
-	r.PUT("/:eventId/updateProduct/:productId", );
-	r.DELETE("/:eventId/deleteProduct/:productId", );
+	r.POST("/:eventId/registerProducts", product.RegisterProductsHandler);
+	r.GET("/:eventId/getProducts", product.GetAllEventProductsHandler);
+	r.GET("/:eventId/getProduct/:productId", product.GetAnEventProductHandler);
+	r.PUT("/:eventId/updateProduct/:productId", product.UpdateAnEventProductHandler);
+	r.DELETE("/:eventId/deleteProduct/:productId", product.DeleteAnEventProductHandler);
 
 	// --------Event Booking Routes For Sellers---------//
 
