@@ -24,6 +24,7 @@ func CheckHandler(c *gin.Context) {
 		"user": gin.H{
 			"id":              claims.ID,
 			"emailId":         claims.EmailId,
+			"role":            claims.Role,
 			"isEmailVerified": claims.IsEmailVerified,
 			"isActive":        claims.IsActive,
 		},
