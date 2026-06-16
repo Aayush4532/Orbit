@@ -21,6 +21,8 @@ func main() {
 	r := gin.Default()
 	cfg := configs.LoadConfig()
 	_ = db.GetInstance()
+	_ = db.GetR2Client()
+	_ = db.GetRedisClient()
 
 	ApiGroup := r.Group("/api") // this is the route to group all the backend endpoints.
 	routergroup.ApiRoutes(ApiGroup)

@@ -4,10 +4,14 @@ import (
 	"Orbit/internal/db"
 	"Orbit/internal/models"
 	"Orbit/internal/utils"
+	"Orbit/internal/worker"
 	"context"
+	"fmt"
+	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 func BulkInsertInventory(ctx context.Context, inventories []models.Inventory) error {
@@ -118,4 +122,48 @@ func DeleteProduct(ctx context.Context, productIdStr string) error {
 	}
 
 	return nil
+}
+
+func PullProducts(sellerId bson.ObjectID, eventId bson.ObjectID) error {
+	pool := worker.InitWorkerPool()
+
+	collection := db.GetInstance().Collection("inventories")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	findOptions := options.Find().
+		SetBatchSize(200).
+		SetProjection(bson.M{
+			"image":       0,
+			"createdAt":   0,
+			"updatedAt":   0,
+			"title":       0,
+			"description": 0,
+		})
+
+	cursor, err := collection.Find(ctx,
+		bson.M{"sellerId": sellerId, "eventId": eventId},
+		findOptions,
+	)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var product worker.ProductPayload
+		if err := cursor.Decode(&product); err != nil {
+			log.Printf("decode error: %v", err)
+			continue
+		}
+		pool.Send(product)
+	}
+
+	defer pool.Close()
+
+	if err := pool.Wait(); err != nil {
+		return fmt.Errorf("redis flush error: %w", err)
+	}
+
+	return cursor.Err()
 }
