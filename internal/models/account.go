@@ -34,6 +34,7 @@ type User struct {
 	Password  string        `bson:"password" json:"-"`
 	Age       int           `bson:"age,omitempty" json:"age,omitempty"`
 	Role      string        `bson:"role" json:"role"` // enum: "admin", "buyer", "seller", "user"
+	Image     string        `bson:"image,omitempty" json:"image,omitempty"`
 
 	IsEmailVerified bool `bson:"isEmailVerified" json:"isEmailVerified"`
 	IsActive        bool `bson:"isActive" json:"isActive"` // to block if needed.

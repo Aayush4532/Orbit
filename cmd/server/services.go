@@ -24,11 +24,12 @@ func GraceFulShutDown (server *http.Server) {
 }
 
 func ExecuteShutDown(ctx context.Context, server *http.Server) {
-	StopIncomingRequest(server);
-	StopDatabase();
+	stopIncomingRequest(server);
+	stopDatabase();
+	stopRedis();
 }
 
-func StopIncomingRequest (server *http.Server) {
+func stopIncomingRequest (server *http.Server) {
 	tempContext, cancel := context.WithTimeout(context.Background(), 1 * time.Second)
 	defer cancel();
 	if err := server.Shutdown(tempContext); err != nil {
@@ -36,13 +37,22 @@ func StopIncomingRequest (server *http.Server) {
 	}
 }
 
-func StopDatabase () {
+func stopDatabase () {
 	client := db.GetClient();
 	if client != nil {
 		tempContext, cancel  := context.WithTimeout(context.Background(), 1 * time.Second);
 		defer cancel();
 		if err := client.Disconnect(tempContext); err != nil {
 			log.Printf("Database Disconnect Error");
+		}
+	}
+}
+
+func stopRedis() {
+	client := db.GetRedisClient();
+	if client != nil {
+		if err := client.Close(); err != nil {
+			log.Printf("Redis Disconnect Error");
 		}
 	}
 }

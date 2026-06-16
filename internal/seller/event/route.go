@@ -2,6 +2,7 @@ package event
 
 import (
 	"Orbit/internal/seller/event/product"
+	"Orbit/internal/seller/event/sale"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,9 +24,9 @@ func EventRoutes(r *gin.RouterGroup) {
 
 	// --------Event Booking Routes For Sellers---------//
 
-	r.POST("/:eventId/Live/:id", );
-	r.POST("/:eventId/Pause/:id", );
-	r.POST("/:eventId/End/:id", );
+	r.POST("/:eventId/Live", sale.LiveSaleHandler);
+	// r.POST("/:eventId/Pause", sale.PauseSaleHandler);
+	// r.POST("/:eventId/End", sale.StopSaleHandler);
 
 
 	// --------Afer Event Routes For Sellers---------//
