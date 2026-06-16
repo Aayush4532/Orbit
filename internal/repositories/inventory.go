@@ -139,8 +139,6 @@ func PullProducts(sellerId bson.ObjectID, eventId bson.ObjectID) error {
 			"updatedAt":   0,
 			"title":       0,
 			"description": 0,
-			"sellerId":    0,
-			"eventId":     0,
 		})
 
 	cursor, err := collection.Find(ctx,

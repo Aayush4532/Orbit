@@ -14,6 +14,8 @@ import (
 
 type ProductPayload struct {
 	ID        bson.ObjectID `bson:"_id"`
+	sellerId  bson.ObjectID `bson:"sellerId"`
+	eventId   bson.ObjectID `bson:"eventId"`
 	Price     float64       `bson:"price"`
 	Frequency int           `bson:"frequency"`
 }
@@ -109,7 +111,7 @@ func (wc *WorkerClient) flushOnce(batch []ProductPayload) error {
 	pipe := rdb.Pipeline()
 	for _, p := range batch {
 		priceKey := strconv.FormatFloat(p.Price, 'f', -1, 64)
-		key := fmt.Sprintf("product:%s:%s", p.ID.Hex(), priceKey)
+		key := fmt.Sprintf("product:%s:%s:%s:%s", p.ID.Hex(), p.sellerId.Hex(), p.eventId.Hex(), priceKey)
 		pipe.Set(ctx, key, p.Frequency, 0)
 	}
 	_, err := pipe.Exec(ctx)

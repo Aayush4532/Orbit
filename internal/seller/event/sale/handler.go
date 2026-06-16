@@ -41,7 +41,6 @@ func LiveSaleHandler (c *gin.Context) {
 // 			"error" : "not authorized to perform this operation",
 // 		})
 // 	}
-
 // 	claim := UserClaim.(*utils.Claims);
 // 	if err != nil {
 // 		c.JSON(http.status)
@@ -56,9 +55,16 @@ func LiveSaleHandler (c *gin.Context) {
 // 			"error" : "not authorized to perform this operation",
 // 		})
 // 	}
-
 // 	claim := UserClaim.(*utils.Claims);
+// 	sellerId := claim.ID;
+// 	err := StopSaleService(sellerId, eventId);
 // 	if err != nil {
-// 		c.JSON(http.status)
+// 		c.JSON(http.StatusInternalServerError, gin.H{
+// 			"error" : err.Error(),
+// 		})
+// 		return
 // 	}
+// 	c.JSON(http.StatusOK, gin.H{
+// 		"message" : "sale stopped successfully",
+// 	})
 // }
