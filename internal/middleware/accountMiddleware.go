@@ -56,13 +56,42 @@ func SellerMiddleware() gin.HandlerFunc { // just a func to check if the user is
 			return
 		}
 
-		if claim.IsEmailVerified == false {
+		if claim.IsEmailVerified == false || claim.IsActive == false {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"message": "Email verification required",
 			})
 			return
 		}
 
+		c.Next()
+	}
+}
+
+func BuyerMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims, ok := c.Get("UserFields")
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"message": "Unauthorized",
+			})
+			return
+		}
+
+		claim := claims.(*utils.Claims)
+
+		if claim.Role != "buyer" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"message": "buyer access required",
+			})
+			return
+		}
+
+		if claim.IsEmailVerified == false || claim.IsActive == false {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"message": "Email verification required",
+			})
+			return
+		}
 		c.Next()
 	}
 }

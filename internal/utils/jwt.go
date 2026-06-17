@@ -15,11 +15,22 @@ type Claims struct {
 	Role            string `json:"role"`
 	IsEmailVerified bool   `json:"isEmailVerified"`
 	IsActive        bool   `json:"isActive"`
+	IsApproved      bool   `json:"isApproved"`
 	jwt.RegisteredClaims
 }
 
 func CreateJwtToken(user models.User) (string, error) {
 	key := configs.LoadConfig().JWT_KEY.Key
+//-----------------------Storing is Approved Details in Claims-----------------------------------//
+	buyer := user.BuyerInfo
+	var isApprovedVal bool
+
+	if buyer != nil {
+		isApprovedVal = buyer.IsApproved
+	} else {
+		isApprovedVal = user.SellerInfo.IsApproved
+	}
+// -----------------------------------------------------------------------------------------------//
 
 	claims := Claims{
 		ID:              user.ID.Hex(),
@@ -27,6 +38,7 @@ func CreateJwtToken(user models.User) (string, error) {
 		Role:            user.Role,
 		IsEmailVerified: user.IsEmailVerified,
 		IsActive:        user.IsActive,
+		IsApproved:      isApprovedVal,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(2 * time.Hour)),
 		},

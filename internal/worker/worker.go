@@ -14,10 +14,13 @@ import (
 
 type ProductPayload struct {
 	ID        bson.ObjectID `bson:"_id"`
-	sellerId  bson.ObjectID `bson:"sellerId"`
-	eventId   bson.ObjectID `bson:"eventId"`
+	EventID   bson.ObjectID `bson:"eventId"`
+	SellerID  bson.ObjectID `bson:"sellerId"`
+	Title     string        `bson:"title"`
 	Price     float64       `bson:"price"`
 	Frequency int           `bson:"frequency"`
+	Currency  string        `bson:"currency"`
+	EndsAt    time.Time     `bson:"endsAt"`
 }
 
 type WorkerClient struct {
@@ -36,10 +39,12 @@ func InitWorkerPool() *WorkerClient {
 		productChannel: make(chan ProductPayload, 200),
 		batchSize:      100,
 	}
+
 	for i := 0; i < wc.numWorkers; i++ {
 		wc.workerWg.Add(1)
 		go wc.runWorker()
 	}
+
 	return wc
 }
 
@@ -81,6 +86,7 @@ func (wc *WorkerClient) flush(batch []ProductPayload) {
 
 	if err := wc.flushToRedis(toFlush); err != nil {
 		log.Printf("worker: flush failed: %v", err)
+
 		wc.errMu.Lock()
 		if wc.firstErr == nil {
 			wc.firstErr = err
@@ -91,6 +97,7 @@ func (wc *WorkerClient) flush(batch []ProductPayload) {
 
 func (wc *WorkerClient) flushToRedis(batch []ProductPayload) error {
 	const maxAttempts = 3
+
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if err := wc.flushOnce(batch); err != nil {
@@ -100,6 +107,7 @@ func (wc *WorkerClient) flushToRedis(batch []ProductPayload) error {
 		}
 		return nil
 	}
+
 	return fmt.Errorf("flush failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
@@ -109,11 +117,31 @@ func (wc *WorkerClient) flushOnce(batch []ProductPayload) error {
 
 	rdb := db.GetRedisClient()
 	pipe := rdb.Pipeline()
+
 	for _, p := range batch {
-		priceKey := strconv.FormatFloat(p.Price, 'f', -1, 64)
-		key := fmt.Sprintf("product:%s:%s:%s:%s", p.ID.Hex(), p.sellerId.Hex(), p.eventId.Hex(), priceKey)
-		pipe.Set(ctx, key, p.Frequency, 0)
+		stockKey := fmt.Sprintf("product:%s:%s", p.ID.Hex(), p.EventID.Hex())
+		metaKey := fmt.Sprintf("productmeta:%s:%s", p.ID.Hex(), p.EventID.Hex())
+
+		pipe.Set(ctx, stockKey, p.Frequency, 0)
+
+		pipe.HSet(ctx, metaKey, map[string]any{
+			"productId": p.ID.Hex(),
+			"eventId":   p.EventID.Hex(),
+			"sellerId":  p.SellerID.Hex(),
+			"title":     p.Title,
+			"price":     strconv.FormatFloat(p.Price, 'f', -1, 64),
+			"currency":  p.Currency,
+		})
+
+		if !p.EndsAt.IsZero() {
+			ttl := time.Until(p.EndsAt)
+			if ttl > 0 {
+				pipe.Expire(ctx, stockKey, ttl)
+				pipe.Expire(ctx, metaKey, ttl)
+			}
+		}
 	}
+
 	_, err := pipe.Exec(ctx)
 	return err
 }

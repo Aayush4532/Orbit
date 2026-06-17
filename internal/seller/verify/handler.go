@@ -19,7 +19,11 @@ func VerifySeller(c *gin.Context) {
 		return
 	}
 
-	userClaims := claim.(*utils.Claims);
+	userClaims, ok := claim.(*utils.Claims)
+	if !ok {
+		c.JSON(400, gin.H{"error": "User not authenticated"})
+		return
+	}
 	if userClaims.IsEmailVerified == false {
 		c.JSON(403, gin.H{"error": "Email not verified"})
 		return

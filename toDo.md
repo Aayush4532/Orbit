@@ -7,11 +7,10 @@ GET  /api/seller/events/analytics/:id # analystics of the event
 
 
 //----------------------- Abstracted ToDo-------------------------//
-3. Main Booking Engine. 
-4. Reverse Proxy Server.
-5. go worker to push data from redis to the database.
-6. buyer routes.
-7. Admin Routes.
-8. Client Side interaction Website for this. 
+1. Main Booking Engine. 
+2. go worker to push data from redis to the database. 
+4. Admin Routes. 
+5. Client Side interaction Website for this. 
+6. Reverse Proxy Server. 
 
 ---------------//----------------------------MVP END--------------------------------//----------
