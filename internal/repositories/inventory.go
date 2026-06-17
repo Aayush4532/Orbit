@@ -124,6 +124,7 @@ func DeleteProduct(ctx context.Context, productIdStr string) error {
 	return nil
 }
 
+
 func PullProducts(sellerId bson.ObjectID, eventId bson.ObjectID) error {
 	pool := worker.InitWorkerPool()
 
@@ -134,11 +135,14 @@ func PullProducts(sellerId bson.ObjectID, eventId bson.ObjectID) error {
 	findOptions := options.Find().
 		SetBatchSize(200).
 		SetProjection(bson.M{
-			"image":       0,
-			"createdAt":   0,
-			"updatedAt":   0,
-			"title":       0,
-			"description": 0,
+			"_id":       1,
+			"eventId":   1,
+			"sellerId":  1,
+			"title":     1,
+			"price":     1,
+			"frequency": 1,
+			"currency":  1,
+			"endsAt":    1,
 		})
 
 	cursor, err := collection.Find(ctx,
@@ -159,11 +163,16 @@ func PullProducts(sellerId bson.ObjectID, eventId bson.ObjectID) error {
 		pool.Send(product)
 	}
 
-	defer pool.Close()
+	if err := cursor.Err(); err != nil {
+		pool.Close()
+		return err
+	}
+
+	pool.Close()
 
 	if err := pool.Wait(); err != nil {
 		return fmt.Errorf("redis flush error: %w", err)
 	}
 
-	return cursor.Err()
+	return nil
 }

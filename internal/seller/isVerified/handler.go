@@ -16,16 +16,22 @@ func IsVerifiedSeller(c *gin.Context) {
 		})
 		return
 	}
-	claim := value.(*utils.Claims)
+	claim, ok := value.(*utils.Claims)
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Not Authenticated",
+		})
+		return
+	}
 	emailId := claim.EmailId
 
 	user, err := repositories.GetUserFromEmail(c, emailId)
 	if err != nil {
 		if err.Error() == "No Email Exists" {
-			c.JSON(http.StatusNotFound, gin.H {
-				"error" : err.Error(),
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": err.Error(),
 			})
-			return;
+			return
 		}
 
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -34,25 +40,24 @@ func IsVerifiedSeller(c *gin.Context) {
 		return
 	}
 
-	info := user.SellerInfo;
+	info := user.SellerInfo
 	if info == nil {
-		c.JSON(http.StatusForbidden, gin.H {
-			"error" : "user is not a seller",
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "user is not a seller",
 		})
 		return
 	}
 
 	if info.IsApproved == false {
 		c.JSON(http.StatusForbidden, gin.H{
-			"error" : "seller is not verified",
-			"next_allowed_date" : info.NextAllowedAt,
+			"error":             "seller is not verified",
+			"next_allowed_date": info.NextAllowedAt,
 		})
-		return;
+		return
 	}
 
-
-	c.JSON(http.StatusOK, gin.H {
-		"verified" : true,
-		"message" : "Seller is Verified",
+	c.JSON(http.StatusOK, gin.H{
+		"verified": true,
+		"message":  "Seller is Verified",
 	})
 }

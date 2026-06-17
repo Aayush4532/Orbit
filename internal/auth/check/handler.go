@@ -14,9 +14,17 @@ func CheckHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Internal Server Error",
 		})
+		return;
 	}
 
-	claims := value.(*utils.Claims)
+	claims, ok := value.(*utils.Claims)
+	if !ok{
+		c.JSON(http.StatusForbidden, gin.H{
+			"error" : "unauthorized please try again",
+		})
+
+		return;
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"authenticated": true,
