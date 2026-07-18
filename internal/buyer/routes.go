@@ -2,15 +2,23 @@ package buyer
 
 import (
 	"Orbit/internal/middleware"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 func BuyerRoutes(r *gin.RouterGroup) {
 	r.Use(middleware.UserMiddleware(), middleware.BuyerMiddleware())
-	service := NewService(false, 0)
-	buyerHandler := NewHandler(service)
-	r.GET("/events", );
-	r.GET("/event/:Id")
-	r.POST("/event/:eventId/purchase/:productId", buyerHandler.BuyerEventHandler)
+
+	svc := NewService(false, 0) // requirePayment=false until payment gateway is ready
+	h := NewHandler(svc)
+
+	r.POST("/event/:eventId/purchase/:productId", h.BuyerEventHandler)
+
+	r.GET("/events", func(c *gin.Context) {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented yet"})
+	})
+	r.GET("/event/:id", func(c *gin.Context) {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented yet"})
+	})
 }

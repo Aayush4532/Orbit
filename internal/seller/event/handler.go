@@ -4,128 +4,151 @@ import (
 	"Orbit/internal/models"
 	"Orbit/internal/repositories"
 	"Orbit/internal/utils"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+var eventUploader utils.Uploader = &utils.Event{}
+
 func CreateAnEventHandler(c *gin.Context) {
-	var req RequestBody
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-	claim, ok := c.Get("UserFields")
+	rawClaim, ok := c.Get("UserFields")
 	if !ok {
-		c.JSON(400, gin.H{"error": "Failed to retrieve user fields"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "not permitted"})
 		return
 	}
-	sellerClaim := claim.(*utils.Claims)
-	ObjectifiedId, err := utils.GetObjectFiedIdFromString(sellerClaim.ID)
+	sellerClaim, ok := rawClaim.(*utils.Claims)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid session"})
+		return
+	}
+
+	sellerObjId, err := utils.GetObjectFiedIdFromString(sellerClaim.ID)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "Invalid user ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		return
+	}
+
+	var req RequestBody
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	fileHeader, err := c.FormFile("imageBanner")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "imageBanner file is required"})
 		return
 	}
 
 	newEventId := bson.NewObjectID()
 
+	imgURL, err := eventUploader.UploadPhoto(c.Request.Context(), fileHeader, newEventId.Hex())
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	event := &models.Event{
 		ID:          newEventId,
-		SellerID:    ObjectifiedId,
+		SellerID:    sellerObjId,
 		EventName:   req.Title,
 		Description: req.Description,
 		ScheduledAt: req.ScheduledAt,
-		ImageBanner: req.ImageBanner,
+		ImageBanner: imgURL,
 		IsLive:      false,
 	}
 
-	err = repositories.CreateAnEvent(event)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to create event"})
+	if err := repositories.CreateAnEvent(event); err != nil {
+		_ = eventUploader.DeletePhoto(c.Request.Context(), "event-banner", newEventId.Hex())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create event"})
 		return
 	}
-	c.JSON(201, gin.H{"message": "Event created successfully", "eventId": newEventId.Hex()})
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "event created successfully",
+		"eventId": newEventId.Hex(),
+	})
 }
 
 func GetAllEventsHandler(c *gin.Context) {
-	claim, ok := c.Get("UserFields")
+	rawClaim, ok := c.Get("UserFields")
 	if !ok {
-		c.JSON(400, gin.H{"error": "Failed to retrieve user fields"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "not permitted"})
 		return
 	}
-
-	sellerClaim, ok := claim.(*utils.Claims)
+	sellerClaim, ok := rawClaim.(*utils.Claims)
 	if !ok {
-		c.JSON(400, gin.H{"error": "Invalid user claims"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid session"})
 		return
 	}
 
 	events, err := repositories.GetAllEvents(sellerClaim.ID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to retrieve events"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve events"})
 		return
 	}
 
-	c.JSON(200, gin.H{"events": events})
+	c.JSON(http.StatusOK, gin.H{"events": events})
 }
 
 func GetAnEventHandler(c *gin.Context) {
 	eventId := c.Param("id")
-	claim, ok := c.Get("UserFields")
+
+	rawClaim, ok := c.Get("UserFields")
 	if !ok {
-		c.JSON(400, gin.H{"error": "Failed to retrieve user fields"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "not permitted"})
 		return
 	}
-
-	sellerClaim, ok := claim.(*utils.Claims)
+	sellerClaim, ok := rawClaim.(*utils.Claims)
 	if !ok {
-		c.JSON(400, gin.H{"error": "Invalid user claims"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid session"})
 		return
 	}
 
 	event, err := repositories.GetAnEvent(eventId)
 	if err != nil {
-		c.JSON(404, gin.H{"error": "Event not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "event not found"})
 		return
 	}
 
 	if event.SellerID.Hex() != sellerClaim.ID {
-		c.JSON(403, gin.H{"error": "Unauthorized access to event"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 		return
 	}
 
-	c.JSON(200, gin.H{"event": event})
+	c.JSON(http.StatusOK, gin.H{"event": event})
 }
 
 func UpdateAnEventHandler(c *gin.Context) {
-	claim, ok := c.Get("UserFields")
+	rawClaim, ok := c.Get("UserFields")
 	if !ok {
-		c.JSON(400, gin.H{"error": "Failed to retrieve user fields"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "not permitted"})
 		return
 	}
-
-	sellerClaim, ok := claim.(*utils.Claims)
+	sellerClaim, ok := rawClaim.(*utils.Claims)
 	if !ok {
-		c.JSON(400, gin.H{"error": "Invalid user claims"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid session"})
 		return
 	}
 
 	eventId := c.Param("id")
-	
+
 	event, err := repositories.GetAnEvent(eventId)
 	if err != nil {
-		c.JSON(404, gin.H{"error": "Event not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "event not found"})
 		return
 	}
 
 	if event.SellerID.Hex() != sellerClaim.ID {
-		c.JSON(403, gin.H{"error": "Unauthorized access to this event"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 		return
 	}
 
 	var req UpdateEventRequestBody
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -144,52 +167,46 @@ func UpdateAnEventHandler(c *gin.Context) {
 	}
 
 	if len(updateData) == 0 {
-		c.JSON(400, gin.H{"error": "No fields provided for update"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no fields provided for update"})
 		return
 	}
 
 	if err := repositories.UpdateAnEvent(eventId, updateData); err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update event"})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Event updated successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "event updated successfully"})
 }
 
 func DeleteAnEventHandler(c *gin.Context) {
-	claim, ok := c.Get("UserFields")
+	rawClaim, ok := c.Get("UserFields")
 	if !ok {
-		c.JSON(400, gin.H{"error": "Failed to retrieve user fields"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "not permitted"})
 		return
 	}
-
-	sellerClaim, ok := claim.(*utils.Claims)
+	sellerClaim, ok := rawClaim.(*utils.Claims)
 	if !ok {
-		c.JSON(400, gin.H{"error": "Invalid user claims"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid session"})
 		return
 	}
 
 	eventId := c.Param("id")
+
 	event, err := repositories.GetAnEvent(eventId)
 	if err != nil {
-		c.JSON(404, gin.H{"error": "Event not found or does not exist"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "event not found"})
 		return
 	}
-
-	if event == nil {
-		c.JSON(404, gin.H{"error": "Event not found"})
-		return
-	}
-
 	if event.SellerID.Hex() != sellerClaim.ID {
-		c.JSON(403, gin.H{"error": "Unauthorized access to this event"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 		return
 	}
 
 	if err := repositories.DeleteAnEvent(eventId); err != nil {
-		c.JSON(500, gin.H{"error": "Failed to delete event"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete event"})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Event deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "event deleted successfully"})
 }

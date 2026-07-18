@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"Orbit/configs"
+	"Orbit/internal/db"
 	"bytes"
 	"context"
 	"errors"
@@ -14,69 +16,76 @@ import (
 	"net/http"
 	"time"
 
-	"Orbit/configs"
-	"Orbit/internal/db"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 const (
-	MaxProfileSize = 2 * 1024 * 1024 // 2MB
 	MaxEventSize   = 5 * 1024 * 1024 // 5MB
 	MaxProductSize = 4 * 1024 * 1024 // 4MB
 )
 
-type UploadPhotoToR2 interface {
+type Uploader interface {
 	UploadPhoto(ctx context.Context, fileHeader *multipart.FileHeader, id string) (string, error)
 	DeletePhoto(ctx context.Context, folder string, filename string) error
 	UpdatePhoto(ctx context.Context, fileHeader *multipart.FileHeader, id string, oldFolder string, oldFilename string) (string, error)
 }
 
-type Profile struct{}
 type Event struct{}
 type Product struct{}
 
 func validateAndDecode(fileHeader *multipart.FileHeader, maxSize int64) (image.Image, string, error) {
 	if fileHeader == nil {
-		return nil, "", errors.New("multipart file header is missing")
+		return nil, "", errors.New("image file is required")
 	}
 
 	if fileHeader.Size > maxSize {
-		return nil, "", fmt.Errorf("file too large: maximum allowed size is %d MB", maxSize/(1024*1024))
+		return nil, "", fmt.Errorf("file too large: maximum allowed size is %dMB", maxSize/(1024*1024))
 	}
 
 	file, err := fileHeader.Open()
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to open file: %w", err)
+		return nil, "", fmt.Errorf("failed to open uploaded file: %w", err)
 	}
 	defer file.Close()
 
-	buffer := make([]byte, 512)
-	n, err := file.Read(buffer)
-	if err != nil && err != io.EOF {
+	buf := make([]byte, 512)
+	n, err := file.Read(buf)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, "", fmt.Errorf("failed to read file header: %w", err)
 	}
 
-	contentType := http.DetectContentType(buffer[:n])
+	contentType := http.DetectContentType(buf[:n])
 	if contentType != "image/jpeg" && contentType != "image/png" {
-		return nil, "", errors.New("invalid file standard: only JPG, JPEG, and PNG formats are allowed")
+		return nil, "", errors.New("invalid format: only JPEG and PNG images are accepted")
 	}
 
 	if _, err = file.Seek(0, io.SeekStart); err != nil {
-		return nil, "", fmt.Errorf("failed to reset file pointer: %w", err)
+		return nil, "", fmt.Errorf("failed to reset file pointer for dimension check: %w", err)
+	}
+
+	cfg, _, err := image.DecodeConfig(file)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read image dimensions: %w", err)
+	}
+	if cfg.Width > 5000 || cfg.Height > 5000 {
+		return nil, "", fmt.Errorf("image too large: dimensions %dx%d exceed the 5000×5000 limit", cfg.Width, cfg.Height)
+	}
+
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		return nil, "", fmt.Errorf("failed to reset file pointer for decode: %w", err)
 	}
 
 	img, _, err := image.Decode(file)
 	if err != nil {
-		return nil, "", errors.New("corrupted image content or encoding failure")
+		return nil, "", errors.New("image is corrupted or could not be decoded")
 	}
 
 	return img, contentType, nil
 }
 
 func uploadToR2Internal(ctx context.Context, folder, filename, contentType string, body io.Reader) (string, error) {
-	r2Cfg := configs.LoadConfig().R2 // Note: Optimization tip - ensure this configuration look-up is cached in configs package memory
+	r2Cfg := configs.LoadConfig().R2
 	client := db.GetR2Client()
 
 	key := fmt.Sprintf("%s/%s", folder, filename)
@@ -88,7 +97,7 @@ func uploadToR2Internal(ctx context.Context, folder, filename, contentType strin
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
-		return "", fmt.Errorf("cloudflare r2 driver error: %w", err)
+		return "", fmt.Errorf("R2 upload failed: %w", err)
 	}
 
 	return fmt.Sprintf("%s/%s", r2Cfg.Domain, key), nil
@@ -103,53 +112,32 @@ func deleteFromR2Internal(ctx context.Context, folder, filename string) error {
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to delete object from r2: %w", err)
+		return fmt.Errorf("R2 delete failed for %s: %w", key, err)
 	}
 	return nil
 }
 
-func (p *Profile) UploadPhoto(ctx context.Context, fileHeader *multipart.FileHeader, id string) (string, error) {
-	img, contentType, err := validateAndDecode(fileHeader, MaxProfileSize)
-	if err != nil {
-		return "", err
-	}
-
+func encodeAndUpload(ctx context.Context, img image.Image, contentType, folder, id string, quality int) (string, error) {
 	buf := new(bytes.Buffer)
 	var filename string
+	var encErr error
+
+	stamp := time.Now().UnixNano()
 
 	if contentType == "image/png" {
-		filename = fmt.Sprintf("%s-%d.png", id, time.Now().UnixNano())
-		err = png.Encode(buf, img)
+		filename = fmt.Sprintf("%s-%d.png", id, stamp)
+		encErr = png.Encode(buf, img)
 	} else {
-		filename = fmt.Sprintf("%s-%d.jpg", id, time.Now().UnixNano())
-		err = jpeg.Encode(buf, img, &jpeg.Options{Quality: 82})
+		filename = fmt.Sprintf("%s-%d.jpg", id, stamp)
+		encErr = jpeg.Encode(buf, img, &jpeg.Options{Quality: quality})
 		contentType = "image/jpeg"
 	}
 
-	if err != nil {
-		return "", fmt.Errorf("profile encoding pipeline failure: %w", err)
+	if encErr != nil {
+		return "", fmt.Errorf("image encoding failed: %w", encErr)
 	}
 
-	return uploadToR2Internal(ctx, "profile", filename, contentType, buf)
-}
-
-func (p *Profile) DeletePhoto(ctx context.Context, folder string, filename string) error {
-	return deleteFromR2Internal(ctx, folder, filename)
-}
-
-func (p *Profile) UpdatePhoto(ctx context.Context, fileHeader *multipart.FileHeader, id string, oldFolder string, oldFilename string) (string, error) {
-	newURL, err := p.UploadPhoto(ctx, fileHeader, id)
-	if err != nil {
-		return "", err
-	}
-
-	if oldFilename != "" && oldFolder != "" {
-		if delErr := p.DeletePhoto(ctx, oldFolder, oldFilename); delErr != nil {
-			log.Printf("WARN: Orphan file alert - failed to delete old profile photo %s/%s: %v", oldFolder, oldFilename, delErr)
-		}
-	}
-
-	return newURL, nil
+	return uploadToR2Internal(ctx, folder, filename, contentType, buf)
 }
 
 func (e *Event) UploadPhoto(ctx context.Context, fileHeader *multipart.FileHeader, id string) (string, error) {
@@ -157,24 +145,7 @@ func (e *Event) UploadPhoto(ctx context.Context, fileHeader *multipart.FileHeade
 	if err != nil {
 		return "", err
 	}
-
-	buf := new(bytes.Buffer)
-	var filename string
-
-	if contentType == "image/png" {
-		filename = fmt.Sprintf("%s-%d.png", id, time.Now().UnixNano())
-		err = png.Encode(buf, img)
-	} else {
-		filename = fmt.Sprintf("%s-%d.jpg", id, time.Now().UnixNano())
-		err = jpeg.Encode(buf, img, &jpeg.Options{Quality: 85})
-		contentType = "image/jpeg"
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("event encoding pipeline failure: %w", err)
-	}
-
-	return uploadToR2Internal(ctx, "event-banner", filename, contentType, buf)
+	return encodeAndUpload(ctx, img, contentType, "event-banner", id, 85)
 }
 
 func (e *Event) DeletePhoto(ctx context.Context, folder string, filename string) error {
@@ -186,56 +157,35 @@ func (e *Event) UpdatePhoto(ctx context.Context, fileHeader *multipart.FileHeade
 	if err != nil {
 		return "", err
 	}
-
 	if oldFilename != "" && oldFolder != "" {
-		if delErr := e.DeletePhoto(ctx, oldFolder, oldFilename); delErr != nil {
-			log.Printf("WARN: Orphan file alert - failed to delete old event banner %s/%s: %v", oldFolder, oldFilename, delErr)
+		if delErr := deleteFromR2Internal(ctx, oldFolder, oldFilename); delErr != nil {
+			log.Printf("WARN orphan file — event banner not deleted %s/%s: %v", oldFolder, oldFilename, delErr)
 		}
 	}
-
 	return newURL, nil
 }
 
-func (pr *Product) UploadPhoto(ctx context.Context, fileHeader *multipart.FileHeader, id string) (string, error) {
+func (p *Product) UploadPhoto(ctx context.Context, fileHeader *multipart.FileHeader, id string) (string, error) {
 	img, contentType, err := validateAndDecode(fileHeader, MaxProductSize)
 	if err != nil {
 		return "", err
 	}
-
-	buf := new(bytes.Buffer)
-	var filename string
-
-	if contentType == "image/png" {
-		filename = fmt.Sprintf("%s-%d.png", id, time.Now().UnixNano())
-		err = png.Encode(buf, img)
-	} else {
-		filename = fmt.Sprintf("%s-%d.jpg", id, time.Now().UnixNano())
-		err = jpeg.Encode(buf, img, &jpeg.Options{Quality: 80})
-		contentType = "image/jpeg"
-	}
-
-	if err != nil {
-		return "", fmt.Errorf("product pipeline compression error: %w", err)
-	}
-
-	return uploadToR2Internal(ctx, "product", filename, contentType, buf)
+	return encodeAndUpload(ctx, img, contentType, "product", id, 80)
 }
 
-func (pr *Product) DeletePhoto(ctx context.Context, folder string, filename string) error {
+func (p *Product) DeletePhoto(ctx context.Context, folder string, filename string) error {
 	return deleteFromR2Internal(ctx, folder, filename)
 }
 
-func (pr *Product) UpdatePhoto(ctx context.Context, fileHeader *multipart.FileHeader, id string, oldFolder string, oldFilename string) (string, error) {
-	newURL, err := pr.UploadPhoto(ctx, fileHeader, id)
+func (p *Product) UpdatePhoto(ctx context.Context, fileHeader *multipart.FileHeader, id string, oldFolder string, oldFilename string) (string, error) {
+	newURL, err := p.UploadPhoto(ctx, fileHeader, id)
 	if err != nil {
 		return "", err
 	}
-
 	if oldFilename != "" && oldFolder != "" {
-		if delErr := pr.DeletePhoto(ctx, oldFolder, oldFilename); delErr != nil {
-			log.Printf("WARN: Orphan file alert - failed to delete old product image %s/%s: %v", oldFolder, oldFilename, delErr)
+		if delErr := deleteFromR2Internal(ctx, oldFolder, oldFilename); delErr != nil {
+			log.Printf("WARN orphan file — product image not deleted %s/%s: %v", oldFolder, oldFilename, delErr)
 		}
 	}
-
 	return newURL, nil
 }

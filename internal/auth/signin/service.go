@@ -22,7 +22,7 @@ func SignInService(c context.Context, req SignInRequest) (string, *models.User, 
 
 	token, err := utils.CreateJwtToken(*user);
 	if err != nil {
-		return "", user, err;
+		return "", nil, err;
 	}
 
 	return token, user, nil;

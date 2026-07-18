@@ -28,11 +28,11 @@ func NewService(requirePayment bool, paymentWindow time.Duration) *Service {
 }
 
 func (s *Service) Buy(ctx context.Context, productId, eventId string, claim *utils.Claims) (*PurchaseResponse, error) {
-	status := "CONFIRMED"
+	status := StatusConfirmed
 	ttl := time.Duration(0)
 
 	if s.requirePayment {
-		status = "PENDING_PAYMENT"
+		status = StatusPendingPayment
 		ttl = s.paymentWindow
 	}
 
@@ -41,20 +41,11 @@ func (s *Service) Buy(ctx context.Context, productId, eventId string, claim *uti
 		productId,
 		eventId,
 		claim.ID,
-		status,
+		string(status),
 		ttl,
 	)
 	if err != nil {
-		switch {
-		case errors.Is(err, repositories.ErrSoldOut):
-			return nil, ErrSoldOut
-		case errors.Is(err, repositories.ErrAlreadyBooked):
-			return nil, ErrAlreadyBooked
-		case errors.Is(err, repositories.ErrProductNotFound):
-			return nil, ErrProductNotFound
-		default:
-			return nil, fmt.Errorf("buyer service: %w", err)
-		}
+		return nil, fmt.Errorf("buyer service: %w", err)
 	}
 
 	switch result {

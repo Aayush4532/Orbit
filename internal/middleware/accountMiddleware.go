@@ -56,7 +56,7 @@ func SellerMiddleware() gin.HandlerFunc { // just a func to check if the user is
 			return
 		}
 
-		if claim.IsEmailVerified == false || claim.IsActive == false {
+		if (claim.IsApproved == false) && (claim.IsActive == false) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"message": "Email verification required",
 			})
@@ -86,7 +86,7 @@ func BuyerMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		if claim.IsEmailVerified == false || claim.IsActive == false {
+		if (claim.IsApproved == false) && (claim.IsActive == false) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"message": "Email verification required",
 			})

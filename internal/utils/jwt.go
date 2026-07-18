@@ -22,14 +22,14 @@ type Claims struct {
 func CreateJwtToken(user models.User) (string, error) {
 	key := configs.LoadConfig().JWT_KEY.Key
 //-----------------------Storing is Approved Details in Claims-----------------------------------//
-	buyer := user.BuyerInfo
 	var isApprovedVal bool
 
-	if buyer != nil {
-		isApprovedVal = buyer.IsApproved
+	if user.BuyerInfo != nil {
+		isApprovedVal = user.BuyerInfo.IsApproved;
 	} else {
 		isApprovedVal = user.SellerInfo.IsApproved
 	}
+	
 // -----------------------------------------------------------------------------------------------//
 
 	claims := Claims{

@@ -2,46 +2,72 @@ package product
 
 import (
 	"Orbit/internal/utils"
+	"errors"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterProductsHandler(c *gin.Context) {
-	claim, ok := c.Get("UserFields")
-	if !ok {
-		c.JSON(400, gin.H{"error": "Failed to retrieve user fields"})
-		return
-	}
+var productUploader utils.Uploader = &utils.Product{}
 
-	sellerClaim, ok := claim.(*utils.Claims)
+func extractClaim(c *gin.Context) (*utils.Claims, bool) {
+	raw, ok := c.Get("UserFields")
 	if !ok {
-		c.JSON(400, gin.H{"error": "Invalid user claims"})
+		return nil, false
+	}
+	claim, ok := raw.(*utils.Claims)
+	return claim, ok
+}
+
+func mapServiceError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, ErrEventNotFound), errors.Is(err, ErrProductNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, ErrUnauthorized):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, ErrNoUpdateFields):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, ErrInvalidSeller), errors.Is(err, ErrInvalidEvent):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	}
+}
+
+func RegisterProductHandler(c *gin.Context) {
+	claim, ok := extractClaim(c)
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not permitted"})
 		return
 	}
 
 	eventIdStr := c.Param("eventId")
 
-	var req RegisterProductsRequestBody
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+	var req RegisterProductRequestBody
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	err := RegisterProductsService(c.Request.Context(), sellerClaim.ID, eventIdStr, req.Products)
+	fileHeader, err := c.FormFile("image")
 	if err != nil {
-		if err.Error() == "event not found" {
-			c.JSON(404, gin.H{"error": err.Error()})
-			return
-		}
-		if err.Error() == "unauthorized access to this event" {
-			c.JSON(403, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "product image is required"})
 		return
 	}
 
-	c.JSON(201, gin.H{"message": "Products registered successfully"})
+	imgURL, err := productUploader.UploadPhoto(c.Request.Context(), fileHeader, eventIdStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := RegisterProductService(c.Request.Context(), claim.ID, eventIdStr, req, imgURL); err != nil {
+		_ = productUploader.DeletePhoto(c.Request.Context(), "product", eventIdStr)
+		mapServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "product registered successfully"})
 }
 
 func GetAllEventProductsHandler(c *gin.Context) {
@@ -49,11 +75,11 @@ func GetAllEventProductsHandler(c *gin.Context) {
 
 	products, err := GetAllEventProductsService(c.Request.Context(), eventIdStr)
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve products"})
 		return
 	}
 
-	c.JSON(200, gin.H{"products": products})
+	c.JSON(http.StatusOK, gin.H{"products": products})
 }
 
 func GetAnEventProductHandler(c *gin.Context) {
@@ -61,27 +87,17 @@ func GetAnEventProductHandler(c *gin.Context) {
 
 	product, err := GetAnEventProductService(c.Request.Context(), productIdStr)
 	if err != nil {
-		if err.Error() == "product not found" {
-			c.JSON(404, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(500, gin.H{"error": err.Error()})
+		mapServiceError(c, err)
 		return
 	}
 
-	c.JSON(200, gin.H{"product": product})
+	c.JSON(http.StatusOK, gin.H{"product": product})
 }
 
 func UpdateAnEventProductHandler(c *gin.Context) {
-	claim, ok := c.Get("UserFields")
+	claim, ok := extractClaim(c)
 	if !ok {
-		c.JSON(400, gin.H{"error": "Failed to retrieve user fields"})
-		return
-	}
-
-	sellerClaim, ok := claim.(*utils.Claims)
-	if !ok {
-		c.JSON(400, gin.H{"error": "Invalid user claims"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "not permitted"})
 		return
 	}
 
@@ -89,57 +105,53 @@ func UpdateAnEventProductHandler(c *gin.Context) {
 	productIdStr := c.Param("id")
 
 	var req UpdateProductRequestBody
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	err := UpdateAnEventProductService(c.Request.Context(), sellerClaim.ID, eventIdStr, productIdStr, req)
-	if err != nil {
-		if err.Error() == "event not found" || err.Error() == "product not found" {
-			c.JSON(404, gin.H{"error": err.Error()})
+	var newImageURL string
+	fileHeader, err := c.FormFile("image")
+	if err == nil {
+		newImageURL, err = productUploader.UploadPhoto(c.Request.Context(), fileHeader, productIdStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err.Error() == "unauthorized access to this event" {
-			c.JSON(403, gin.H{"error": err.Error()})
-			return
+	}
+
+	if err := UpdateAnEventProductService(
+		c.Request.Context(),
+		claim.ID,
+		eventIdStr,
+		productIdStr,
+		req,
+		newImageURL,
+	); err != nil {
+		if newImageURL != "" {
+			_ = productUploader.DeletePhoto(c.Request.Context(), "product", productIdStr)
 		}
-		c.JSON(500, gin.H{"error": err.Error()})
+		mapServiceError(c, err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Product updated successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "product updated successfully"})
 }
 
 func DeleteAnEventProductHandler(c *gin.Context) {
-	claim, ok := c.Get("UserFields")
+	claim, ok := extractClaim(c)
 	if !ok {
-		c.JSON(400, gin.H{"error": "Failed to retrieve user fields"})
-		return
-	}
-
-	sellerClaim, ok := claim.(*utils.Claims)
-	if !ok {
-		c.JSON(400, gin.H{"error": "Invalid user claims"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "not permitted"})
 		return
 	}
 
 	eventIdStr := c.Param("eventId")
 	productIdStr := c.Param("id")
 
-	err := DeleteAnEventProductService(c.Request.Context(), sellerClaim.ID, eventIdStr, productIdStr)
-	if err != nil {
-		if err.Error() == "event not found" || err.Error() == "product not found" {
-			c.JSON(404, gin.H{"error": err.Error()})
-			return
-		}
-		if err.Error() == "unauthorized access to this event" {
-			c.JSON(403, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(500, gin.H{"error": err.Error()})
+	if err := DeleteAnEventProductService(c.Request.Context(), claim.ID, eventIdStr, productIdStr); err != nil {
+		mapServiceError(c, err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Product deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "product deleted successfully"})
 }

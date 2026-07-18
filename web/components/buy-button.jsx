@@ -1,0 +1,4 @@
+"use client";
+import { useState } from "react";
+import { Check, ShoppingBag } from "lucide-react";
+export function BuyButton({ eventSlug, productId }) { const [state, setState] = useState("idle"); async function buy() { setState("loading"); const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventSlug, productId }) }); setState(response.ok ? "done" : "error"); } return <button onClick={buy} disabled={state === "loading" || state === "done"} className="flex items-center justify-center gap-2 rounded-xl bg-lime-300 px-4 py-3 text-sm font-bold text-black transition hover:bg-lime-200 disabled:opacity-70">{state === "done" ? <><Check size={16}/> Secured</> : state === "loading" ? "Securing…" : <><ShoppingBag size={16}/> Buy now</>}{state === "error" && "Try again"}</button>; }

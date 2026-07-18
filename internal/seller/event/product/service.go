@@ -5,51 +5,52 @@ import (
 	"Orbit/internal/repositories"
 	"Orbit/internal/utils"
 	"context"
-	"errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-func RegisterProductsService(ctx context.Context, sellerIdStr string, eventIdStr string, items []ProductItemRequest) error {
+func RegisterProductService(
+	ctx context.Context,
+	sellerIdStr string,
+	eventIdStr string,
+	req RegisterProductRequestBody,
+	imageURL string,
+) error {
 	sellerId, err := utils.GetObjectFiedIdFromString(sellerIdStr)
 	if err != nil {
-		return errors.New("invalid seller ID")
+		return ErrInvalidSeller
 	}
 
 	eventId, err := utils.GetObjectFiedIdFromString(eventIdStr)
 	if err != nil {
-		return errors.New("invalid event ID")
+		return ErrInvalidEvent
 	}
 
 	event, err := repositories.GetAnEvent(eventIdStr)
 	if err != nil || event == nil {
-		return errors.New("event not found")
+		return ErrEventNotFound
 	}
 
 	if event.SellerID != sellerId {
-		return errors.New("unauthorized access to this event")
+		return ErrUnauthorized
 	}
 
 	now := time.Now()
-	inventories := make([]models.Inventory, len(items))
-
-	for i, item := range items {
-		inventories[i] = models.Inventory{
-			ID:          bson.NewObjectID(),
-			SellerID:    sellerId,
-			EventID:     eventId,
-			Title:       item.Title,
-			Description: item.Description,
-			Price:       item.Price,
-			Frequency:   item.Frequency,
-			Image:       item.Image,
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		}
+	inventory := models.Inventory{
+		ID:          bson.NewObjectID(),
+		SellerID:    sellerId,
+		EventID:     eventId,
+		Title:       req.Title,
+		Description: req.Description,
+		Price:       req.Price,
+		Frequency:   req.Frequency,
+		Image:       imageURL,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
-	return repositories.BulkInsertInventory(ctx, inventories)
+	return repositories.InsertInventory(ctx, inventory)
 }
 
 func GetAllEventProductsService(ctx context.Context, eventIdStr string) ([]*models.Inventory, error) {
@@ -62,29 +63,39 @@ func GetAnEventProductService(ctx context.Context, productIdStr string) (*models
 		return nil, err
 	}
 	if product == nil {
-		return nil, errors.New("product not found")
+		return nil, ErrProductNotFound
 	}
 	return product, nil
 }
 
-func UpdateAnEventProductService(ctx context.Context, sellerIdStr, eventIdStr, productIdStr string, req UpdateProductRequestBody) error {
+func UpdateAnEventProductService(
+	ctx context.Context,
+	sellerIdStr string,
+	eventIdStr string,
+	productIdStr string,
+	req UpdateProductRequestBody,
+	newImageURL string,
+) error {
 	sellerId, err := utils.GetObjectFiedIdFromString(sellerIdStr)
 	if err != nil {
-		return errors.New("invalid seller ID")
+		return ErrInvalidSeller
 	}
 
 	event, err := repositories.GetAnEvent(eventIdStr)
 	if err != nil || event == nil {
-		return errors.New("event not found")
+		return ErrEventNotFound
 	}
 
 	if event.SellerID != sellerId {
-		return errors.New("unauthorized access to this event")
+		return ErrUnauthorized
 	}
 
 	product, err := repositories.GetProductByID(ctx, productIdStr)
-	if err != nil || product == nil {
-		return errors.New("product not found")
+	if err != nil {
+		return err // real DB error
+	}
+	if product == nil {
+		return ErrProductNotFound
 	}
 
 	updateData := bson.M{}
@@ -100,35 +111,43 @@ func UpdateAnEventProductService(ctx context.Context, sellerIdStr, eventIdStr, p
 	if req.Frequency != nil {
 		updateData["frequency"] = *req.Frequency
 	}
-	if req.Image != nil {
-		updateData["image"] = *req.Image
+	if newImageURL != "" {
+		updateData["image"] = newImageURL
 	}
 
 	if len(updateData) == 0 {
-		return errors.New("no fields provided for update")
+		return ErrNoUpdateFields
 	}
 
 	return repositories.UpdateProduct(ctx, productIdStr, updateData)
 }
 
-func DeleteAnEventProductService(ctx context.Context, sellerIdStr, eventIdStr, productIdStr string) error {
+func DeleteAnEventProductService(
+	ctx context.Context,
+	sellerIdStr string,
+	eventIdStr string,
+	productIdStr string,
+) error {
 	sellerId, err := utils.GetObjectFiedIdFromString(sellerIdStr)
 	if err != nil {
-		return errors.New("invalid seller ID")
+		return ErrInvalidSeller
 	}
 
 	event, err := repositories.GetAnEvent(eventIdStr)
 	if err != nil || event == nil {
-		return errors.New("event not found")
+		return ErrEventNotFound
 	}
 
 	if event.SellerID != sellerId {
-		return errors.New("unauthorized access to this event")
+		return ErrUnauthorized
 	}
 
 	product, err := repositories.GetProductByID(ctx, productIdStr)
-	if err != nil || product == nil {
-		return errors.New("product not found")
+	if err != nil {
+		return err
+	}
+	if product == nil {
+		return ErrProductNotFound
 	}
 
 	return repositories.DeleteProduct(ctx, productIdStr)
