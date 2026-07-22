@@ -3,35 +3,49 @@ package sale
 import (
 	"Orbit/internal/repositories"
 	"Orbit/internal/utils"
+	"context"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func LiveSaleService(sellerId string, eventId string) error {
-	sellerObjectifiedId, err := utils.GetObjectFiedIdFromString(sellerId);
+	sellerObjId, err := utils.GetObjectFiedIdFromString(sellerId)
 	if err != nil {
-		return err;
+		return err
 	}
-	eventObjectifiedId, err := utils.GetObjectFiedIdFromString(eventId);
+	eventObjId, err := utils.GetObjectFiedIdFromString(eventId)
 	if err != nil {
-		return  err;
+		return err
 	}
 
-	if err := repositories.PullProducts(sellerObjectifiedId, eventObjectifiedId); err != nil {
-		return err;
-	}
-	return  nil;
+	ctx := context.Background()
+	return repositories.LiveSale(ctx, eventId, sellerObjId, eventObjId)
 }
 
-// func StopSaleService(sellerId string, eventId string) error {
-// 	sellerObjectifiedId, err := utils.GetObjectFiedIdFromString(sellerId);
-// 	if err != nil {
-// 		return err;
-// 	}
-// 	eventObjectifiedId, err := utils.GetObjectFiedIdFromString(eventId);
-// 	if err != nil {
-// 		return  err;
-// 	}
-// 	if err := repositories.PullProducts(sellerObjectifiedId, eventObjectifiedId); err != nil {
-// 		return err;
-// 	}
-// 	return  nil;
-// }
+func PauseSaleService(sellerId string, eventId string) error {
+	if _, err := utils.GetObjectFiedIdFromString(sellerId); err != nil {
+		return err
+	}
+	ctx := context.Background()
+	return repositories.PauseSale(ctx, eventId)
+}
+
+func ResumeSaleService(sellerId string, eventId string) error {
+	if _, err := utils.GetObjectFiedIdFromString(sellerId); err != nil {
+		return err
+	}
+	ctx := context.Background()
+	return repositories.ResumeSale(ctx, eventId)
+}
+
+func StopSaleService(sellerId string, eventId string) error {
+	if _, err := utils.GetObjectFiedIdFromString(sellerId); err != nil {
+		return err
+	}
+	eventObjId, err := bson.ObjectIDFromHex(eventId)
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	return repositories.StopSale(ctx, eventId, eventObjId)
+}

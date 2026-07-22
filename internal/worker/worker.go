@@ -2,6 +2,7 @@ package worker
 
 import (
 	"Orbit/internal/db"
+	"Orbit/internal/rediskeys"
 	"context"
 	"fmt"
 	"log"
@@ -29,8 +30,10 @@ type WorkerClient struct {
 	batchSize      int
 	workerWg       sync.WaitGroup
 
-	firstErr error
+	closeOnce sync.Once
+
 	errMu    sync.Mutex
+	firstErr error
 }
 
 func InitWorkerPool() *WorkerClient {
@@ -39,12 +42,10 @@ func InitWorkerPool() *WorkerClient {
 		productChannel: make(chan ProductPayload, 200),
 		batchSize:      100,
 	}
-
 	for i := 0; i < wc.numWorkers; i++ {
 		wc.workerWg.Add(1)
 		go wc.runWorker()
 	}
-
 	return wc
 }
 
@@ -53,28 +54,28 @@ func (wc *WorkerClient) Send(p ProductPayload) {
 }
 
 func (wc *WorkerClient) Close() {
-	close(wc.productChannel)
+	wc.closeOnce.Do(func() {
+		close(wc.productChannel)
+	})
 }
 
 func (wc *WorkerClient) Wait() error {
 	wc.workerWg.Wait()
+	wc.errMu.Lock()
+	defer wc.errMu.Unlock()
 	return wc.firstErr
 }
 
 func (wc *WorkerClient) runWorker() {
 	defer wc.workerWg.Done()
-
 	localBuf := make([]ProductPayload, 0, wc.batchSize)
-
 	for product := range wc.productChannel {
 		localBuf = append(localBuf, product)
-
 		if len(localBuf) >= wc.batchSize {
 			wc.flush(localBuf)
 			localBuf = localBuf[:0]
 		}
 	}
-
 	if len(localBuf) > 0 {
 		wc.flush(localBuf)
 	}
@@ -83,10 +84,8 @@ func (wc *WorkerClient) runWorker() {
 func (wc *WorkerClient) flush(batch []ProductPayload) {
 	toFlush := make([]ProductPayload, len(batch))
 	copy(toFlush, batch)
-
 	if err := wc.flushToRedis(toFlush); err != nil {
 		log.Printf("worker: flush failed: %v", err)
-
 		wc.errMu.Lock()
 		if wc.firstErr == nil {
 			wc.firstErr = err
@@ -97,7 +96,6 @@ func (wc *WorkerClient) flush(batch []ProductPayload) {
 
 func (wc *WorkerClient) flushToRedis(batch []ProductPayload) error {
 	const maxAttempts = 3
-
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if err := wc.flushOnce(batch); err != nil {
@@ -107,7 +105,6 @@ func (wc *WorkerClient) flushToRedis(batch []ProductPayload) error {
 		}
 		return nil
 	}
-
 	return fmt.Errorf("flush failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
@@ -119,25 +116,33 @@ func (wc *WorkerClient) flushOnce(batch []ProductPayload) error {
 	pipe := rdb.Pipeline()
 
 	for _, p := range batch {
-		stockKey := fmt.Sprintf("product:%s:%s", p.ID.Hex(), p.EventID.Hex())
-		metaKey := fmt.Sprintf("productmeta:%s:%s", p.ID.Hex(), p.EventID.Hex())
+		priceStr := strconv.FormatFloat(p.Price, 'f', -1, 64)
+		productId := p.ID.Hex()
+		eventId := p.EventID.Hex()
 
-		pipe.Set(ctx, stockKey, p.Frequency, 0)
+		stockKey := rediskeys.StockKey(productId, eventId)
+		pipe.HSet(ctx, stockKey, map[string]any{
+			"stock": p.Frequency,
+			"price": priceStr,
+		})
 
+		metaKey := rediskeys.MetaKey(productId, eventId)
 		pipe.HSet(ctx, metaKey, map[string]any{
-			"productId": p.ID.Hex(),
-			"eventId":   p.EventID.Hex(),
+			"productId": productId,
+			"eventId":   eventId,
 			"sellerId":  p.SellerID.Hex(),
 			"title":     p.Title,
-			"price":     strconv.FormatFloat(p.Price, 'f', -1, 64),
 			"currency":  p.Currency,
 		})
 
+		trackingKey := rediskeys.EventProductTrackingKey(eventId)
+		pipe.SAdd(ctx, trackingKey, stockKey, metaKey)
+
 		if !p.EndsAt.IsZero() {
-			ttl := time.Until(p.EndsAt)
-			if ttl > 0 {
+			if ttl := time.Until(p.EndsAt); ttl > 0 {
 				pipe.Expire(ctx, stockKey, ttl)
 				pipe.Expire(ctx, metaKey, ttl)
+				pipe.Expire(ctx, trackingKey, ttl)
 			}
 		}
 	}
