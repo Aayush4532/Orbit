@@ -95,3 +95,33 @@ func BuyerMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+func AdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims, ok := c.Get("UserFields")
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"message": "Unauthorized",
+			})
+			return
+		}
+
+		claim := claims.(*utils.Claims)
+
+		if claim.Role != "admin" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"message": "admin access required",
+			})
+			return
+		}
+
+		if (claim.IsApproved == false) && (claim.IsActive == false) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"message": "Email verification required",
+			})
+			return
+		}
+		c.Next()
+
+	}
+}

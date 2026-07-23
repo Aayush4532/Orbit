@@ -35,19 +35,19 @@ func RegisterUserService(ctx context.Context, req RegisterRequest) (string, *mod
 		Age:             req.Age,
 		Password:        string(hash),
 		Role:            req.Role,
-		IsEmailVerified: false,
-		IsActive:        true,
+		IsEmailVerified: true, // should be false and verified in production environment.
+ 		IsActive:        true, 
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
 
 	if req.Role == "buyer" {
 		user.BuyerInfo = &models.BuyerProfile{
-			IsApproved: false, 
+			IsApproved: true, 
 		}
 	} else if req.Role == "seller" {
 		user.SellerInfo = &models.SellerProfile{
-			IsApproved: false, 
+			IsApproved: true, // will keep false in production environment
 		}
 	}
 
