@@ -83,7 +83,7 @@ func GetAllEventProductsHandler(c *gin.Context) {
 }
 
 func GetAnEventProductHandler(c *gin.Context) {
-	productIdStr := c.Param("id")
+	productIdStr := c.Param("productId")
 
 	product, err := GetAnEventProductService(c.Request.Context(), productIdStr)
 	if err != nil {
@@ -102,7 +102,7 @@ func UpdateAnEventProductHandler(c *gin.Context) {
 	}
 
 	eventIdStr := c.Param("eventId")
-	productIdStr := c.Param("id")
+	productIdStr := c.Param("productId")
 
 	var req UpdateProductRequestBody
 	if err := c.ShouldBind(&req); err != nil {
@@ -146,7 +146,7 @@ func DeleteAnEventProductHandler(c *gin.Context) {
 	}
 
 	eventIdStr := c.Param("eventId")
-	productIdStr := c.Param("id")
+	productIdStr := c.Param("productId")
 
 	if err := DeleteAnEventProductService(c.Request.Context(), claim.ID, eventIdStr, productIdStr); err != nil {
 		mapServiceError(c, err)

@@ -36,14 +36,14 @@ func RegisterUserService(ctx context.Context, req RegisterRequest) (string, *mod
 		Password:        string(hash),
 		Role:            req.Role,
 		IsEmailVerified: true, // should be false and verified in production environment.
- 		IsActive:        true, 
+		IsActive:        true,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
 
 	if req.Role == "buyer" {
 		user.BuyerInfo = &models.BuyerProfile{
-			IsApproved: true, 
+			IsApproved: true,
 		}
 	} else if req.Role == "seller" {
 		user.SellerInfo = &models.SellerProfile{
@@ -56,9 +56,9 @@ func RegisterUserService(ctx context.Context, req RegisterRequest) (string, *mod
 		return "", nil, errors.New("Database insert failed")
 	}
 
-	token, err := utils.CreateJwtToken(*user);
+	token, err := utils.CreateJwtToken(*user)
 	if err != nil {
-		return "", user, errors.New("token creation failed");
+		return "", user, errors.New("token creation failed")
 	}
 
 	return token, user, nil

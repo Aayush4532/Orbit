@@ -79,7 +79,7 @@ func LoadConfig() *Config {
 
 	redis_url := os.Getenv("REDIS_URL")
 	redis_pass := os.Getenv("REDIS_PASS")
-	if redis_url == "" || redis_pass == "" {
+	if redis_url == "" /* || redis_pass == "" */ {
 		log.Fatal("No Redis Url Found..!!")
 	}
 	redis := Redis{

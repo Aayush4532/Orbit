@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	// "log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -53,7 +53,7 @@ func (s *Service) Buy(ctx context.Context, productId, eventId string, claim *uti
 	case repositories.BookingSaleNotActive:
 		return nil, ErrSaleNotActive
 	case repositories.BookingSuccess:
-		go s.persistOrder(reservation, productId, eventId, claim.ID)
+		// go s.persistOrder(reservation, productId, eventId, claim.ID)
 
 		resp := &PurchaseResponse{
 			ReservationID: reservation.ReservationID,
@@ -69,43 +69,43 @@ func (s *Service) Buy(ctx context.Context, productId, eventId string, claim *uti
 	}
 }
 
-func (s *Service) persistOrder(reservation *repositories.Reservation, productId, eventId, userId string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+// func (s *Service) persistOrder(reservation *repositories.Reservation, productId, eventId, userId string) {
+// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// 	defer cancel()
 
-	userObjId, err := bson.ObjectIDFromHex(userId)
-	if err != nil {
-		log.Printf("WARN persistOrder: invalid userId %s: %v", userId, err)
-		return
-	}
-	productObjId, err := bson.ObjectIDFromHex(productId)
-	if err != nil {
-		log.Printf("WARN persistOrder: invalid productId %s: %v", productId, err)
-		return
-	}
-	eventObjId, err := bson.ObjectIDFromHex(eventId)
-	if err != nil {
-		log.Printf("WARN persistOrder: invalid eventId %s: %v", eventId, err)
-		return
-	}
+// 	userObjId, err := bson.ObjectIDFromHex(userId)
+// 	if err != nil {
+// 		log.Printf("WARN persistOrder: invalid userId %s: %v", userId, err)
+// 		return
+// 	}
+// 	productObjId, err := bson.ObjectIDFromHex(productId)
+// 	if err != nil {
+// 		log.Printf("WARN persistOrder: invalid productId %s: %v", productId, err)
+// 		return
+// 	}
+// 	eventObjId, err := bson.ObjectIDFromHex(eventId)
+// 	if err != nil {
+// 		log.Printf("WARN persistOrder: invalid eventId %s: %v", eventId, err)
+// 		return
+// 	}
 
-	now := time.Now()
-	order := models.Order{
-		ID:            bson.NewObjectID(),
-		UserID:        userObjId,
-		ProductID:     productObjId,
-		EventID:       eventObjId,
-		ReservationID: reservation.ReservationID,
-		Price:         reservation.Price,
-		Status:        models.OrderStatus(reservation.Status),
-		CreatedAt:     now,
-		UpdatedAt:     now,
-	}
+// 	now := time.Now()
+// 	order := models.Order{
+// 		ID:            bson.NewObjectID(),
+// 		UserID:        userObjId,
+// 		ProductID:     productObjId,
+// 		EventID:       eventObjId,
+// 		ReservationID: reservation.ReservationID,
+// 		Price:         reservation.Price,
+// 		Status:        models.OrderStatus(reservation.Status),
+// 		CreatedAt:     now,
+// 		UpdatedAt:     now,
+// 	}
 
-	if err := repositories.CreateOrder(ctx, order); err != nil {
-		log.Printf("WARN persistOrder: save failed for reservation=%s: %v", reservation.ReservationID, err)
-	}
-}
+// 	if err := repositories.CreateOrder(ctx, order); err != nil {
+// 		log.Printf("WARN persistOrder: save failed for reservation=%s: %v", reservation.ReservationID, err)
+// 	}
+// }
 
 func (s *Service) GetLiveEvents(ctx context.Context) ([]EventView, error) {
 	events, err := repositories.GetLiveEvents(ctx)
