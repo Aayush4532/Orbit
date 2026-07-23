@@ -60,79 +60,6 @@ paths:
                     type: string
                     example: "Internal Server Error"
 
-  /api/auth/login:
-    post:
-      summary: Verify and give access with the session token
-      description: Verifies the user with email and password and if validated returns token.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - email
-                - password
-              properties:
-                email:
-                  type: string
-                  example: "abc@example.com"
-                password:
-                  type: string
-                  example: "SecuredPassword@123"
-      responses:
-        "200":
-          description: Login Successful
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Sign In Successfully"
-                  user:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                        example: "obj9023"
-                      firstName:
-                        type: string
-                        example: "Aayush"
-                      lastName:
-                        type: string
-                        example: "Verma"
-                      email:
-                        type: string
-                        example: "aayush@email.com"
-                      age:
-                        type: integer
-                        example: 25
-                      role:
-                        type: string
-                        example: "seller"
-        "400":
-          description: Unauthorized Access
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "email or password is wrong"
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "Internal Server Error"
-
   /api/auth/signup:
     post:
       summary: Sign up user
@@ -632,64 +559,6 @@ paths:
       responses:
         "200":
           description: Product deleted cleanly
-
-  /api/seller/events/{eventId}/live/{id}:
-    post:
-      summary: Push event live to production engine
-      description: Triggers rapid caching pipelines to shift static inventory structures instantly into high performance Redis instances.
-      parameters:
-        - name: eventId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Cache populated successfully. Sale initialized.
-
-  /api/seller/events/{eventId}/pause/{id}:
-    post:
-      summary: Pause live execution pipeline
-      description: Sets high speed configuration flags in memory caches to refuse incoming order requests instantly.
-      parameters:
-        - name: eventId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Transaction processors paused cleanly
-
-  /api/seller/events/{eventId}/stop/{id}:
-    post:
-      summary: Terminate event cleanly and execute synchronization
-      description: Tears down high priority volatile cache allocations and initiates batch storage pipelines to commit ledger details permanently.
-      parameters:
-        - name: eventId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Engine state closed. Database persistence successfully executed.
-
   /api/seller/events/booking/fetch/{eventId}:
     get:
       summary: Fetch booking ledger records
@@ -749,3 +618,253 @@ paths:
                   sellThroughRate:
                     type: number
                     example: 100.0
+
+  /api/auth/signin:
+    post:
+      summary: Sign in user (alternate signin path)
+      description: Verifies the user with email and password and returns a session token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  example: "abc@example.com"
+                password:
+                  type: string
+                  example: "SecuredPassword@123"
+      responses:
+        "200":
+          description: Sign in successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Sign In Successfully"
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        example: "obj9023"
+                      firstName:
+                        type: string
+                        example: "Aayush"
+                      lastName:
+                        type: string
+                        example: "Verma"
+                      email:
+                        type: string
+                        example: "aayush@email.com"
+                      role:
+                        type: string
+                        example: "seller"
+        "400":
+          description: Unauthorized Access
+        "500":
+          description: Internal Server Error
+
+  /api/buyer/events:
+    get:
+      summary: Get live events (buyer view)
+      description: Returns a list of live events available to buyers.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    eventName:
+                      type: string
+                    description:
+                      type: string
+                    isLive:
+                      type: boolean
+                    scheduledAt:
+                      type: string
+                      format: date-time
+        "500":
+          description: Internal Server Error
+
+  /api/buyer/event/{id}:
+    get:
+      summary: Get products for an event (buyer)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    eventId:
+                      type: string
+                    title:
+                      type: string
+                    description:
+                      type: string
+                    price:
+                      type: number
+                    frequency:
+                      type: integer
+                    image:
+                      type: string
+        "404":
+          description: Event not found
+        "500":
+          description: Internal Server Error
+
+  /api/buyer/event/{eventId}/purchase/{productId}:
+    post:
+      summary: Purchase a product in an event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity:
+                  type: integer
+                  example: 1
+                paymentMethod:
+                  type: string
+                  example: "card"
+      responses:
+        "201":
+          description: Purchase completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bookingId:
+                    type: string
+        "400":
+          description: Bad Request
+        "403":
+          description: Unauthorized or not allowed
+        "500":
+          description: Internal Server Error
+
+  /api/admin/verifications/pending:
+    get:
+      summary: List pending seller verifications
+      description: Returns verification requests awaiting admin action.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    companyName:
+                      type: string
+                    gstin:
+                      type: string
+                    submittedAt:
+                      type: string
+                      format: date-time
+        "500":
+          description: Internal Server Error
+
+  /api/admin/verifications/{id}:
+    get:
+      summary: Get verification request detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+        "404":
+          description: Not found
+        "500":
+          description: Internal Server Error
+
+  /api/admin/verifications/{id}/approve:
+    post:
+      summary: Approve a verification request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Approved successfully
+        "404":
+          description: Not found
+        "500":
+          description: Internal Server Error
+
+  /api/admin/verifications/{id}/reject:
+    post:
+      summary: Reject a verification request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Rejected successfully
+        "404":
+          description: Not found
+        "500":
+          description: Internal Server Error

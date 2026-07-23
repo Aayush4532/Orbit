@@ -5,7 +5,6 @@ import (
 	"Orbit/internal/models"
 	"context"
 	"errors"
-	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -38,16 +37,4 @@ func GetUserFromEmail(ctx context.Context, email string) (*models.User, error) {
 	}
 
 	return  &user, nil;
-}
-
-func RegisterSellerVerificationRequest (req *models.VerificationRequest) error {
-	collection := db.GetInstance().Collection("verification");
-	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
-	defer cancel()
-
-	_, err := collection.InsertOne(ctx, req)
-	if err != nil {
-		return err
-	}
-	return nil
 }

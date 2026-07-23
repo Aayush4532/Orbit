@@ -25,7 +25,7 @@ func VerifySeller(c *gin.Context) {
 		return
 	}
 	if userClaims.IsEmailVerified == false {
-		c.JSON(403, gin.H{"error": "Email not verified"})
+		c.JSON(403, gin.H{"error": "Email not verified, verify it first.."});
 		return
 	}
 

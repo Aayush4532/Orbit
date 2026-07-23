@@ -3,24 +3,39 @@ package repositories
 import (
 	"Orbit/internal/db"
 	"Orbit/internal/models"
+	"Orbit/internal/rediskeys"
 	"Orbit/internal/utils"
 	"Orbit/internal/worker"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
+
+func InsertInventory(ctx context.Context, inventory models.Inventory) error {
+	collection := db.GetInstance().Collection("inventories")
+	tCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	_, err := collection.InsertOne(tCtx, inventory)
+	if err != nil {
+		return fmt.Errorf("insert inventory: %w", err)
+	}
+	return nil
+}
 
 func BulkInsertInventory(ctx context.Context, inventories []models.Inventory) error {
 	if len(inventories) == 0 {
 		return nil
 	}
 
-	instance := db.GetInstance().Collection("inventories")
-	ctx, cancel := context.WithTimeout(ctx, 7*time.Second)
+	collection := db.GetInstance().Collection("inventories")
+	tCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	docs := make([]interface{}, len(inventories))
@@ -28,11 +43,16 @@ func BulkInsertInventory(ctx context.Context, inventories []models.Inventory) er
 		docs[i] = inv
 	}
 
-	_, err := instance.InsertMany(ctx, docs)
+	opts := options.InsertMany().SetOrdered(false)
+	result, err := collection.InsertMany(tCtx, docs, opts)
 	if err != nil {
-		return err
+		var bwe mongo.BulkWriteException
+		if errors.As(err, &bwe) {
+			return fmt.Errorf("partial insert: %d succeeded, %d failed: %w",
+				len(result.InsertedIDs), len(bwe.WriteErrors), err)
+		}
+		return fmt.Errorf("bulk insert: %w", err)
 	}
-
 	return nil
 }
 
@@ -42,13 +62,13 @@ func GetAllProductsByEvent(ctx context.Context, eventIdStr string) ([]*models.In
 		return nil, err
 	}
 
-	instance := db.GetInstance().Collection("inventories")
+	collection := db.GetInstance().Collection("inventories")
 	tCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cursor, err := instance.Find(tCtx, bson.M{"eventId": eventId})
+	cursor, err := collection.Find(tCtx, bson.M{"eventId": eventId})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find products by event: %w", err)
 	}
 	defer cursor.Close(tCtx)
 
@@ -56,12 +76,12 @@ func GetAllProductsByEvent(ctx context.Context, eventIdStr string) ([]*models.In
 	for cursor.Next(tCtx) {
 		var item models.Inventory
 		if err := cursor.Decode(&item); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("decode product: %w", err)
 		}
 		products = append(products, &item)
 	}
 	if err := cursor.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cursor: %w", err)
 	}
 
 	return products, nil
@@ -73,14 +93,17 @@ func GetProductByID(ctx context.Context, productIdStr string) (*models.Inventory
 		return nil, err
 	}
 
-	instance := db.GetInstance().Collection("inventories")
+	collection := db.GetInstance().Collection("inventories")
 	tCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	var item models.Inventory
-	err = instance.FindOne(tCtx, bson.M{"_id": productId}).Decode(&item)
-	if err != nil {
+	err = collection.FindOne(tCtx, bson.M{"_id": productId}).Decode(&item)
+	if errors.Is(err, mongo.ErrNoDocuments) {
 		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find product: %w", err)
 	}
 
 	return &item, nil
@@ -92,17 +115,16 @@ func UpdateProduct(ctx context.Context, productIdStr string, updateData bson.M) 
 		return err
 	}
 
-	instance := db.GetInstance().Collection("inventories")
+	updateData["updatedAt"] = time.Now()
+
+	collection := db.GetInstance().Collection("inventories")
 	tCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	updateData["updatedAt"] = time.Now()
-
-	_, err = instance.UpdateOne(tCtx, bson.M{"_id": productId}, bson.M{"$set": updateData})
+	_, err = collection.UpdateOne(tCtx, bson.M{"_id": productId}, bson.M{"$set": updateData})
 	if err != nil {
-		return err
+		return fmt.Errorf("update product: %w", err)
 	}
-
 	return nil
 }
 
@@ -112,21 +134,20 @@ func DeleteProduct(ctx context.Context, productIdStr string) error {
 		return err
 	}
 
-	instance := db.GetInstance().Collection("inventories")
+	collection := db.GetInstance().Collection("inventories")
 	tCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	_, err = instance.DeleteOne(tCtx, bson.M{"_id": productId})
+	_, err = collection.DeleteOne(tCtx, bson.M{"_id": productId})
 	if err != nil {
-		return err
+		return fmt.Errorf("delete product: %w", err)
 	}
-
 	return nil
 }
 
-
 func PullProducts(sellerId bson.ObjectID, eventId bson.ObjectID) error {
 	pool := worker.InitWorkerPool()
+	eventIdStr := eventId.Hex()
 
 	collection := db.GetInstance().Collection("inventories")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -138,9 +159,9 @@ func PullProducts(sellerId bson.ObjectID, eventId bson.ObjectID) error {
 			"_id":       1,
 			"eventId":   1,
 			"sellerId":  1,
-			"title":     1,
 			"price":     1,
 			"frequency": 1,
+			"title":     1,
 			"currency":  1,
 			"endsAt":    1,
 		})
@@ -150,28 +171,60 @@ func PullProducts(sellerId bson.ObjectID, eventId bson.ObjectID) error {
 		findOptions,
 	)
 	if err != nil {
-		return err
+		pool.Close()
+		pool.Wait()
+		return fmt.Errorf("find inventory: %w", err)
 	}
 	defer cursor.Close(ctx)
 
 	for cursor.Next(ctx) {
 		var product worker.ProductPayload
 		if err := cursor.Decode(&product); err != nil {
-			log.Printf("decode error: %v", err)
+			log.Printf("PullProducts: decode error (skipping): %v", err)
 			continue
 		}
 		pool.Send(product)
 	}
 
-	if err := cursor.Err(); err != nil {
-		pool.Close()
-		return err
+	pool.Close()
+	workerErr := pool.Wait()
+	cursorErr := cursor.Err()
+
+	if workerErr != nil || cursorErr != nil {
+		if cleanupErr := CleanupEventProductKeys(context.Background(), eventIdStr); cleanupErr != nil {
+			log.Printf("CRITICAL: PullProducts cleanup failed for event %s after load error: %v — "+
+				"orphan product keys may remain in Redis, manual check required",
+				eventIdStr, cleanupErr)
+		}
 	}
 
-	pool.Close()
+	if workerErr != nil {
+		return fmt.Errorf("redis flush: %w", workerErr)
+	}
+	if cursorErr != nil {
+		return fmt.Errorf("cursor: %w", cursorErr)
+	}
 
-	if err := pool.Wait(); err != nil {
-		return fmt.Errorf("redis flush error: %w", err)
+	return nil
+}
+
+func CleanupEventProductKeys(ctx context.Context, eventId string) error {
+	rdb := db.GetRedisClient()
+	trackingKey := rediskeys.EventProductTrackingKey(eventId)
+
+	keys, err := rdb.SMembers(ctx, trackingKey).Result()
+	if err != nil {
+		return fmt.Errorf("fetch product keys: %w", err)
+	}
+
+	if len(keys) > 0 {
+		if err := rdb.Del(ctx, keys...).Err(); err != nil {
+			return fmt.Errorf("delete product keys: %w", err)
+		}
+	}
+
+	if err := rdb.Del(ctx, trackingKey).Err(); err != nil {
+		return fmt.Errorf("delete tracking key: %w", err)
 	}
 
 	return nil

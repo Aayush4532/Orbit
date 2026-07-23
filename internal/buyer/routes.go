@@ -8,9 +8,13 @@ import (
 
 func BuyerRoutes(r *gin.RouterGroup) {
 	r.Use(middleware.UserMiddleware(), middleware.BuyerMiddleware())
-	service := NewService(false, 0)
-	buyerHandler := NewHandler(service)
-	r.GET("/events", );
-	r.GET("/event/:Id")
-	r.POST("/event/:eventId/purchase/:productId", buyerHandler.BuyerEventHandler)
+
+	svc := NewService(false, 0)
+	h := NewHandler(svc)
+
+	r.GET("/events", h.GetLiveEventsHandler)
+
+	r.GET("/event/:id", h.GetEventProductsHandler)
+
+	r.POST("/event/:eventId/purchase/:productId", h.BuyerEventHandler)
 }
