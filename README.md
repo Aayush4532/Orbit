@@ -1,4 +1,4 @@
-# Orbit
+# Orbit — High Concurrency Flash Sale Backend
 
 > Event-scoped flash sales with an atomic reservation path for limited inventory.
 
